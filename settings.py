@@ -28,7 +28,7 @@ BOOST_STATIC_LINK = True
 PYTHON_HOME = None
 V8_HOME = None
 V8_GIT_URL = "https://chromium.googlesource.com/v8/v8.git"
-V8_GIT_TAG = "5.8.110"  # https://chromium.googlesource.com/v8/v8.git/+/5.8.110
+V8_GIT_TAG = "7.9.231" # "5.8.110"  # https://chromium.googlesource.com/v8/v8.git/+/5.8.110
 DEPOT_HOME = None
 DEPOT_GIT_URL = "https://chromium.googlesource.com/chromium/tools/depot_tools.git"
 DEPOT_DOWNLOAD_URL = "https://storage.googleapis.com/chrome-infra/depot_tools.zip"
@@ -36,7 +36,7 @@ DEPOT_DOWNLOAD_URL = "https://storage.googleapis.com/chrome-infra/depot_tools.zi
 INCLUDE = None
 LIB = None
 OFFLINE_MODE = False
-PYV8_DEBUG = False
+PYV8_DEBUG = True
 
 MAKE = 'gmake' if is_freebsd else 'make'
 
@@ -61,7 +61,7 @@ PYV8_DEBUG = bool(strtobool(os.environ.get('PYV8_DEBUG', str(PYV8_DEBUG))))
 MAKE = os.environ.get('MAKE', MAKE)
 
 if V8_HOME is None or not os.path.exists(os.path.join(V8_HOME, 'include', 'v8.h')):
-    V8_HOME = os.path.join(PYV8_HOME, 'build', 'v8-' + V8_GIT_TAG)
+    V8_HOME = os.path.join(PYV8_HOME, 'build', 'v8')
 
 if DEPOT_HOME is None:
     DEPOT_HOME = os.path.join(PYV8_HOME, 'depot_tools')
