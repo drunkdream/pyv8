@@ -93,9 +93,11 @@ MemoryAllocationManager::CallbackMap MemoryAllocationManager::s_callbacks;
 
 void CEngine::Expose(void)
 {
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
 #ifndef SUPPORT_SERIALIZE
-  v8::V8::SetFatalErrorHandler(ReportFatalError);
-  v8::V8::AddMessageListener(ReportMessage);
+  isolate->SetFatalErrorHandler(ReportFatalError);
+  isolate->AddMessageListener(ReportMessage);
 #endif
 
 #ifdef SUPPORT_MEMORY_ALLOCATOR
@@ -119,9 +121,9 @@ void CEngine::Expose(void)
 #endif // SUPPORT_MEMORY_ALLOCATOR
 
   py::enum_<v8i::LanguageMode>("JSLanguageMode")
-    .value("CLASSIC", v8i::SLOPPY)
-    .value("SLOPPY", v8i::SLOPPY)
-    .value("STRICT", v8i::STRICT);
+    .value("CLASSIC", v8::internal::LanguageMode::kSloppy)
+    .value("SLOPPY", v8::internal::LanguageMode::kSloppy)
+    .value("STRICT", v8::internal::LanguageMode::kStrict);
 
   py::class_<CEngine, boost::noncopyable>("JSEngine", "JSEngine is a backend Javascript engine.")
     .def(py::init<>("Create a new script engine instance."))
@@ -129,7 +131,7 @@ void CEngine::Expose(void)
                          "Get the V8 engine version.")
     .add_static_property("boost", &CEngine::GetBoostVersion,
                          "Get the boost version.")
-    .add_static_property("dead", &v8::V8::IsDead,
+    .add_static_property("dead", &v8::Isolate::IsDead,
                          "Check if V8 is dead and therefore unusable.")
 
     .def("setFlags", &CEngine::SetFlags, "Sets V8 flags from a string.")
@@ -324,7 +326,8 @@ void CEngine::CollectAllGarbage(bool force_compaction)
 
 void CEngine::TerminateAllThreads(void)
 {
-  v8::V8::TerminateExecution(v8::Isolate::GetCurrent());
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  isolate->TerminateExecution();
 }
 
 void CEngine::ReportFatalError(const char* location, const char* message)
@@ -334,19 +337,21 @@ void CEngine::ReportFatalError(const char* location, const char* message)
 
 void CEngine::ReportMessage(v8::Handle<v8::Message> message, v8::Handle<v8::Value> data)
 {
-  v8::String::Utf8Value filename(message->GetScriptResourceName());
-  int lineno = message->GetLineNumber();
-  v8::String::Utf8Value sourceline(message->GetSourceLine());
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  auto context = isolate->GetCurrentContext();
+  v8::String::Utf8Value filename(isolate, message->GetScriptResourceName());
+  int lineno = message->GetLineNumber(context).FromMaybe(0);
+  v8::String::Utf8Value sourceline(isolate, message->GetSourceLine(context).FromMaybe(v8::Local<v8::Value>()));
 
   std::cerr << *filename << ":" << lineno << " -> " << *sourceline << std::endl;
 }
 
 bool CEngine::SetMemoryLimit(int max_semi_space_size, int max_old_space_size, int max_executable_size, int code_range_size)
 {
-  return v8i::Isolate::Current()->heap()->ConfigureHeap(max_semi_space_size,
+  v8i::Isolate::Current()->heap()->ConfigureHeap(max_semi_space_size * 1024,
                                                         max_old_space_size,
-                                                        max_executable_size,
                                                         code_range_size);
+  return true;
 }
 
 // Uses the address of a local variable to determine the stack top now.
@@ -379,7 +384,7 @@ boost::shared_ptr<CScript> CEngine::InternalCompile(v8::Handle<v8::String> src,
 {
   v8::HandleScope handle_scope(m_isolate);
 
-  v8::TryCatch try_catch;
+  v8::TryCatch try_catch(m_isolate);
 
   v8::MaybeLocal<v8::Script> script;
 
@@ -421,13 +426,15 @@ py::object CEngine::ExecuteScript(v8::Handle<v8::Script> script)
 
   v8::HandleScope handle_scope(m_isolate);
 
-  v8::TryCatch try_catch;
+  auto context = m_isolate->GetCurrentContext();
+
+  v8::TryCatch try_catch(m_isolate);
 
   v8::Handle<v8::Value> result;
 
   Py_BEGIN_ALLOW_THREADS
 
-  result = script->Run();
+  result = script->Run(context).FromMaybe(v8::Local<v8::Value>());
 
   Py_END_ALLOW_THREADS
 
@@ -490,7 +497,7 @@ const std::string CScript::GetSource(void) const
 {
   v8::HandleScope handle_scope(m_isolate);
 
-  v8::String::Utf8Value source(Source());
+  v8::String::Utf8Value source(m_isolate, Source());
 
   return std::string(*source, source.length());
 }
@@ -567,7 +574,7 @@ public:
     CPythonGIL python_gil;
 
     py::object func;
-    v8::String::Utf8Value func_name(name);
+    v8::String::Utf8Value func_name(isolate, name);
     std::string func_name_str(*func_name, func_name.length());
 
     try

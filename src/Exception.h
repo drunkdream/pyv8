@@ -132,7 +132,8 @@ protected:
     v8::HandleScope handle_scope(m_isolate);
 
     m_exc.Reset(m_isolate, try_catch.Exception());
-    m_stack.Reset(m_isolate, try_catch.StackTrace());
+    auto context = reinterpret_cast<v8::Isolate*>(isolate)->GetCurrentContext();
+    m_stack.Reset(m_isolate, try_catch.StackTrace(context).FromMaybe(v8::Local<v8::Value>()));
     m_msg.Reset(m_isolate, try_catch.Message());
   }
 public:

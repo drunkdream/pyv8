@@ -21,10 +21,10 @@ struct CWrapper
 
 class CPythonObject
 {
-  static void NamedGetter(v8::Local<v8::String> prop, const v8::PropertyCallbackInfo<v8::Value> &info);
-  static void NamedSetter(v8::Local<v8::String> prop, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<v8::Value> &info);
-  static void NamedQuery(v8::Local<v8::String> prop, const v8::PropertyCallbackInfo<v8::Integer> &info);
-  static void NamedDeleter(v8::Local<v8::String> prop, const v8::PropertyCallbackInfo<v8::Boolean> &info);
+  static void NamedGetter(v8::Local<v8::Name> prop, const v8::PropertyCallbackInfo<v8::Value> &info);
+  static void NamedSetter(v8::Local<v8::Name> prop, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<v8::Value> &info);
+  static void NamedQuery(v8::Local<v8::Name> prop, const v8::PropertyCallbackInfo<v8::Integer> &info);
+  static void NamedDeleter(v8::Local<v8::Name> prop, const v8::PropertyCallbackInfo<v8::Boolean> &info);
   static void NamedEnumerator(const v8::PropertyCallbackInfo<v8::Array> &info);
 
   static void IndexedGetter(uint32_t index, const v8::PropertyCallbackInfo<v8::Value> &info);

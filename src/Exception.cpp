@@ -81,7 +81,7 @@ CJavascriptStackTracePtr CJavascriptStackTrace::GetCurrentStackTrace(
 {
   v8::HandleScope handle_scope(isolate);
 
-  v8::TryCatch try_catch;
+  v8::TryCatch try_catch(isolate);
 
   v8::Handle<v8::StackTrace> st = v8::StackTrace::CurrentStackTrace(isolate, frame_limit, options);
 
@@ -94,9 +94,9 @@ CJavascriptStackFramePtr CJavascriptStackTrace::GetFrame(size_t idx) const
 {
   v8::HandleScope handle_scope(m_isolate);
 
-  v8::TryCatch try_catch;
+  v8::TryCatch try_catch(m_isolate);
 
-  v8::Handle<v8::StackFrame> frame = Handle()->GetFrame(idx);
+  v8::Handle<v8::StackFrame> frame = Handle()->GetFrame(m_isolate, idx);
 
   if (frame.IsEmpty()) CJavascriptException::ThrowIf(m_isolate, try_catch);
 
@@ -107,7 +107,7 @@ void CJavascriptStackTrace::Dump(std::ostream& os) const
 {
   v8::HandleScope handle_scope(m_isolate);
 
-  v8::TryCatch try_catch;
+  v8::TryCatch try_catch(m_isolate);
 
   std::ostringstream oss;
 
@@ -115,7 +115,7 @@ void CJavascriptStackTrace::Dump(std::ostream& os) const
   {
     v8::Handle<v8::StackFrame> frame = GetFrame(i)->Handle();
 
-    v8::String::Utf8Value funcName(frame->GetFunctionName()), scriptName(frame->GetScriptName());
+    v8::String::Utf8Value funcName(m_isolate, frame->GetFunctionName()), scriptName(m_isolate, frame->GetScriptName());
 
     os << "\tat ";
 
@@ -143,7 +143,7 @@ const std::string CJavascriptStackFrame::GetScriptName() const
 {
   v8::HandleScope handle_scope(m_isolate);
 
-  v8::String::Utf8Value name(Handle()->GetScriptName());
+  v8::String::Utf8Value name(m_isolate, Handle()->GetScriptName());
 
   return std::string(*name, name.length());
 }
@@ -151,7 +151,7 @@ const std::string CJavascriptStackFrame::GetFunctionName() const
 {
   v8::HandleScope handle_scope(m_isolate);
 
-  v8::String::Utf8Value name(Handle()->GetFunctionName());
+  v8::String::Utf8Value name(m_isolate, Handle()->GetFunctionName());
 
   return std::string(*name, name.length());
 }
@@ -163,7 +163,7 @@ const std::string CJavascriptException::GetName(void)
 
   v8::HandleScope handle_scope(m_isolate);
 
-  v8::String::Utf8Value msg(v8::Handle<v8::String>::Cast(Exception()->ToObject()->Get(v8::String::NewFromUtf8(m_isolate, "name"))));
+  v8::String::Utf8Value msg(m_isolate, v8::Handle<v8::String>::Cast(Exception()->ToObject(m_isolate)->Get(v8::String::NewFromUtf8(m_isolate, "name"))));
 
   return std::string(*msg, msg.length());
 }
@@ -175,7 +175,7 @@ const std::string CJavascriptException::GetMessage(void)
 
   v8::HandleScope handle_scope(m_isolate);
 
-  v8::String::Utf8Value msg(v8::Handle<v8::String>::Cast(Exception()->ToObject()->Get(v8::String::NewFromUtf8(m_isolate, "message"))));
+  v8::String::Utf8Value msg(m_isolate, v8::Handle<v8::String>::Cast(Exception()->ToObject(m_isolate)->Get(v8::String::NewFromUtf8(m_isolate, "message"))));
 
   return std::string(*msg, msg.length());
 }
@@ -188,7 +188,7 @@ const std::string CJavascriptException::GetScriptName(void)
   if (!m_msg.IsEmpty() && !Message()->GetScriptResourceName().IsEmpty() &&
       !Message()->GetScriptResourceName()->IsUndefined())
   {
-    v8::String::Utf8Value name(Message()->GetScriptResourceName());
+    v8::String::Utf8Value name(m_isolate, Message()->GetScriptResourceName());
 
     return std::string(*name, name.length());
   }
@@ -198,10 +198,11 @@ const std::string CJavascriptException::GetScriptName(void)
 int CJavascriptException::GetLineNumber(void)
 {
   assert(m_isolate->InContext());
+  auto context = m_isolate->GetCurrentContext();
 
   v8::HandleScope handle_scope(m_isolate);
 
-  return m_msg.IsEmpty() ? 1 : Message()->GetLineNumber();
+  return m_msg.IsEmpty() ? 1 : Message()->GetLineNumber(context).FromMaybe(0);
 }
 int CJavascriptException::GetStartPosition(void)
 {
@@ -240,11 +241,12 @@ const std::string CJavascriptException::GetSourceLine(void)
   assert(m_isolate->InContext());
 
   v8::HandleScope handle_scope(m_isolate);
+  auto context = m_isolate->GetCurrentContext();
 
-  if (!m_msg.IsEmpty() && !Message()->GetSourceLine().IsEmpty() &&
-      !Message()->GetSourceLine()->IsUndefined())
+  if (!m_msg.IsEmpty() && !Message()->GetSourceLine(context).FromMaybe(v8::Local<v8::Value>()).IsEmpty() &&
+      !Message()->GetSourceLine(context).FromMaybe(v8::Local<v8::Value>())->IsUndefined())
   {
-    v8::String::Utf8Value line(Message()->GetSourceLine());
+    v8::String::Utf8Value line(m_isolate, Message()->GetSourceLine(context).FromMaybe(v8::Local<v8::Value>()));
 
     return std::string(*line, line.length());
   }
@@ -259,7 +261,7 @@ const std::string CJavascriptException::GetStackTrace(void)
 
   if (!m_stack.IsEmpty())
   {
-    v8::String::Utf8Value stack(v8::Handle<v8::String>::Cast(Stack()));
+    v8::String::Utf8Value stack(m_isolate, v8::Handle<v8::String>::Cast(Stack()));
 
     return std::string(*stack, stack.length());
   }
@@ -269,12 +271,13 @@ const std::string CJavascriptException::GetStackTrace(void)
 const std::string CJavascriptException::Extract(v8::Isolate *isolate, v8::TryCatch& try_catch)
 {
   assert(isolate->InContext());
+  auto context = isolate->GetCurrentContext();
 
   v8::HandleScope handle_scope(isolate);
 
   std::ostringstream oss;
 
-  v8::String::Utf8Value msg(try_catch.Exception());
+  v8::String::Utf8Value msg(isolate, try_catch.Exception());
 
   if (*msg)
     oss << std::string(*msg, msg.length());
@@ -288,17 +291,17 @@ const std::string CJavascriptException::Extract(v8::Isolate *isolate, v8::TryCat
     if (!message->GetScriptResourceName().IsEmpty() &&
         !message->GetScriptResourceName()->IsUndefined())
     {
-      v8::String::Utf8Value name(message->GetScriptResourceName());
+      v8::String::Utf8Value name(isolate, message->GetScriptResourceName());
 
       oss << std::string(*name, name.length());
     }
 
-    oss << " @ " << message->GetLineNumber() << " : " << message->GetStartColumn() << " ) ";
+    oss << " @ " << message->GetLineNumber(context).FromMaybe(0) << " : " << message->GetStartColumn() << " ) ";
 
-    if (!message->GetSourceLine().IsEmpty() &&
-        !message->GetSourceLine()->IsUndefined())
+    if (!message->GetSourceLine(context).FromMaybe(v8::Local<v8::Value>()).IsEmpty() &&
+        !message->GetSourceLine(context).FromMaybe(v8::Local<v8::Value>())->IsUndefined())
     {
-      v8::String::Utf8Value line(message->GetSourceLine());
+      v8::String::Utf8Value line(isolate, message->GetSourceLine(context).FromMaybe(v8::Local<v8::Value>()));
 
       oss << " -> " << std::string(*line, line.length());
     }
@@ -328,12 +331,12 @@ void CJavascriptException::ThrowIf(v8::Isolate *isolate, v8::TryCatch& try_catch
 
     if (obj->IsObject())
     {
-      v8::Handle<v8::Object> exc = obj->ToObject();
+      v8::Handle<v8::Object> exc = obj->ToObject(isolate);
       v8::Handle<v8::String> name = v8::String::NewFromUtf8(isolate, "name");
 
       if (exc->Has(name))
       {
-        v8::String::Utf8Value s(v8::Handle<v8::String>::Cast(exc->Get(name)));
+        v8::String::Utf8Value s(isolate, v8::Handle<v8::String>::Cast(exc->Get(name)));
 
         for (size_t i=0; i<_countof(SupportErrors); i++)
         {
@@ -360,11 +363,12 @@ void ExceptionTranslator::Translate(CJavascriptException const& ex)
   else
   {
     v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
     v8::HandleScope handle_scope(isolate);
 
     if (!ex.Exception().IsEmpty() && ex.Exception()->IsObject())
     {
-      v8::Handle<v8::Object> obj = ex.Exception()->ToObject();
+      v8::Handle<v8::Object> obj = ex.Exception()->ToObject(isolate);
 
       v8::MaybeLocal<v8::Value> exc_type = obj->GetPrivate(isolate->GetCurrentContext(),
         v8::Private::New(isolate, v8::String::NewFromUtf8(v8::Isolate::GetCurrent(), "exc_type")));
