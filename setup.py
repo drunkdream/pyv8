@@ -134,7 +134,7 @@ def sync_v8():
     https://github.com/v8/v8/wiki/Using%20Git
     """
     if os.path.isdir(V8_HOME):
-        exec_cmd(os.path.join(DEPOT_HOME, 'gclient'), 'sync',
+        exec_cmd(os.path.join(DEPOT_HOME, 'gclient'), 'sync', '-v',
                  cwd=V8_HOME,
                  msg="Sync Google V8 code...")
     else:
@@ -176,7 +176,6 @@ def build_v8():
         'v8_enable_gdbjit': V8_GDB_JIT,
         'v8_enable_handle_zapping': V8_HANDLE_ZAPPING,
         'v8_enable_i18n_support': V8_I18N,
-        'v8_enable_inspector': V8_INSPECTOR,
         'v8_enable_object_print': V8_OBJECT_PRINT,
         'v8_enable_slow_dchecks': V8_SLOW_DCHECKS,
         'v8_enable_trace_maps': V8_TRACE_MAPS,
@@ -187,6 +186,9 @@ def build_v8():
         'v8_interpreted_regexp': not V8_NATIVE_REGEXP,
         'v8_no_inline': V8_NO_INLINE,
         'v8_use_snapshot': V8_USE_SNAPSHOT,
+        'v8_static_library': True,
+        'v8_monolithic': True,
+        'v8_use_external_startup_data': False,
     }
 
     if is_winnt:
@@ -202,7 +204,7 @@ def build_v8():
                  "--args='%s'" % ' '.join(args),
                  cwd=V8_HOME, msg="generate build scripts for V8 (v%s)" % V8_GIT_TAG)
 
-        exec_cmd("ninja -C out.gn/%s v8" % target,
+        exec_cmd("ninja -C out.gn/%s v8_monolith" % target,
                  cwd=V8_HOME, msg="build V8 with ninja")
 
 
@@ -319,7 +321,7 @@ if __name__ == '__main__':
                         stream=sys.stderr)
 
     source_files = ["Utils.cpp", "Logger.cpp", "Exception.cpp", "Isolate.cpp", "Context.cpp",
-                    "Engine.cpp", "Wrapper.cpp", "Debug.cpp", "Locker.cpp", "PyV8.cpp"]
+                    "Engine.cpp", "Wrapper.cpp", "Locker.cpp", "PyV8.cpp"] # "Debug.cpp", 
 
     if V8_AST:
         source_files += ["AST.cpp", "PrettyPrinter.cpp"]
