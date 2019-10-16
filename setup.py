@@ -188,6 +188,7 @@ def build_v8():
         'v8_use_snapshot': V8_USE_SNAPSHOT,
         'v8_static_library': True,
         'v8_monolithic': True,
+        'is_component_build': False,
         'v8_use_external_startup_data': False,
     }
 
