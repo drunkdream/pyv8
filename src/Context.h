@@ -25,17 +25,16 @@ private: // Embeded Data
   {
     assert(!context.IsEmpty());
     assert(index > DebugIdIndex);
-
-    auto value = static_cast<T *>(v8::Handle<v8::External>::Cast(context->GetEmbedderData(index))->Value());
-
-    if (!value && creator)
+    auto data = context->GetEmbedderData(index);
+    if (data.IsEmpty() && creator)
     {
-      value = creator();
+      auto value = creator();
 
       SetEmbedderData(context, index, value);
-    }
 
-    return value;
+      return value;
+    }
+    return static_cast<T *>(v8::Handle<v8::External>::Cast(data)->Value());
   }
 
   template <typename T>

@@ -4,8 +4,13 @@
 #undef TRUE
 #undef FALSE
 
+#include "v8config.h"
+# define V8_INLINE inline
+
 #include "src/v8.h"
 #include "src/api.h"
+#include "src/api-inl.h"
+#include "src/objects/js-array-inl.h"
 #include "src/debug/debug.h"
 
 /*

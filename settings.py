@@ -24,11 +24,11 @@ PYV8_HOME = os.path.abspath(os.path.dirname(__file__))
 BOOST_HOME = None
 BOOST_MT = is_osx
 BOOST_DEBUG = False
-BOOST_STATIC_LINK = True
+BOOST_STATIC_LINK = False
 PYTHON_HOME = None
 V8_HOME = None
 V8_GIT_URL = "https://chromium.googlesource.com/v8/v8.git"
-V8_GIT_TAG = "5.8.110"  # https://chromium.googlesource.com/v8/v8.git/+/5.8.110
+V8_GIT_TAG = "7.2.110" # "5.8.110"  # https://chromium.googlesource.com/v8/v8.git/+/5.8.110
 DEPOT_HOME = None
 DEPOT_GIT_URL = "https://chromium.googlesource.com/chromium/tools/depot_tools.git"
 DEPOT_DOWNLOAD_URL = "https://storage.googleapis.com/chrome-infra/depot_tools.zip"
@@ -61,7 +61,7 @@ PYV8_DEBUG = bool(strtobool(os.environ.get('PYV8_DEBUG', str(PYV8_DEBUG))))
 MAKE = os.environ.get('MAKE', MAKE)
 
 if V8_HOME is None or not os.path.exists(os.path.join(V8_HOME, 'include', 'v8.h')):
-    V8_HOME = os.path.join(PYV8_HOME, 'build', 'v8-' + V8_GIT_TAG)
+    V8_HOME = os.path.join(PYV8_HOME, 'build', 'v8')
 
 if DEPOT_HOME is None:
     DEPOT_HOME = os.path.join(PYV8_HOME, 'depot_tools')
@@ -91,6 +91,8 @@ V8_DEBUGGER = False
 
 macros = [
     ("BOOST_PYTHON_STATIC_LIB", None),
+    ("BOOST_LOG_DLL", None),
+    ("BOOST_THREAD_PLATFORM_PTHREAD", None),
 ]
 
 if V8_DEBUGGER:
@@ -122,7 +124,6 @@ if BOOST_DEBUG:
 include_dirs = [
     os.path.join(V8_HOME, 'include'),
     V8_HOME,
-    os.path.join(V8_HOME, 'src'),
 ]
 
 library_dirs = []
@@ -141,7 +142,7 @@ if LIB:
 
 if not is_winnt:
     include_dirs += ['/usr/local/include']
-    library_dirs += ['/usr/local/lib']
+    library_dirs += ['/usr/local/lib', '/usr/lib/x86_64-linux-gnu']
 
     if os.path.isdir('/opt/local/'):
         include_dirs += ['/opt/local/include']
@@ -256,12 +257,17 @@ arch = 'x64' if is_64bit else 'arm' if is_arm else 'ia32'
 mode = 'debug' if PYV8_DEBUG else 'release'
 target = arch + '.' + mode
 
-v8_libs = ['v8', 'v8_libbase', 'v8_libplatform']
+v8_libs = ['v8_monolith'] # 'v8', 'v8_libbase', 'v8_libplatform'
 
 if V8_I18N:
     v8_libs += ['icuuc', 'icui18n']
 
+include_dirs.append(os.path.join(V8_HOME, 'out.gn', target, 'gen'))
+
 v8_library_path = "%s/out.gn/%s/" % (V8_HOME, target)
 
 libraries += v8_libs
+libraries += [":libc++.a", ":libc++abi.a"] # must be last
 library_dirs.append(v8_library_path)
+library_dirs.append(os.path.join(v8_library_path, 'obj'))
+

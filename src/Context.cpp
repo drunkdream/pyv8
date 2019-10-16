@@ -153,14 +153,15 @@ py::object CContext::GetGlobal(void) const
 
 py::str CContext::GetSecurityToken(void) const
 {
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::HandleScope handle_scope(isolate);
 
   v8::Handle<v8::Value> token = Context()->GetSecurityToken();
 
   if (token.IsEmpty())
     return py::str();
 
-  v8::String::Utf8Value str(token->ToString());
+  v8::String::Utf8Value str(isolate, token->ToString(isolate));
 
   return py::str(*str, str.length());
 }
@@ -222,7 +223,7 @@ py::object CContext::GetCalling(v8::Isolate *isolate)
 {
   v8::HandleScope handle_scope(isolate);
 
-  v8::Handle<v8::Context> calling = isolate->GetCallingContext();
+  v8::Handle<v8::Context> calling = isolate->GetCurrentContext();
 
   return (!isolate->InContext() || calling.IsEmpty()) ? py::object() : py::object(py::handle<>(boost::python::converter::shared_ptr_to_python<CContext>(CContextPtr(new CContext(calling)))));
 }

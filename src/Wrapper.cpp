@@ -16,8 +16,8 @@
 #include "Context.h"
 #include "Utils.h"
 
-#define TERMINATE_EXECUTION_CHECK(returnValue)                         \
-  if (v8::V8::IsExecutionTerminating())                                \
+#define TERMINATE_EXECUTION_CHECK(isolate, returnValue)                \
+  if (isolate->IsExecutionTerminating())                               \
   {                                                                    \
     ::PyErr_Clear();                                                   \
     ::PyErr_SetString(PyExc_RuntimeError, "execution is terminating"); \
@@ -141,6 +141,8 @@ void CPythonObject::ThrowIf(v8::Isolate *isolate)
 
   assert(PyErr_OCCURRED());
 
+  auto context = isolate->GetCurrentContext();
+
   v8::HandleScope handle_scope(isolate);
 
   PyObject *exc, *val, *trb;
@@ -227,17 +229,17 @@ void CPythonObject::ThrowIf(v8::Isolate *isolate)
 // FIXME How to trace the lifecycle of exception? and when to delete those object in the hidden value?
 
 #ifdef SUPPORT_TRACE_EXCEPTION_LIFECYCLE
-    error->ToObject()->SetPrivate(isolate->GetCurrentContext(),
+    error->ToObject(context).FromMaybe(v8::Local<v8::Object>())->SetPrivate(isolate->GetCurrentContext(),
                                   v8::Private::New(isolate, v8::String::NewFromUtf8(isolate, "exc_type")),
                                   v8::External::New(isolate, ObjectTracer::Trace(error, new py::object(type)).Object()));
-    error->ToObject()->SetPrivate(isolate->GetCurrentContext(),
+    error->ToObject(context).FromMaybe(v8::Local<v8::Object>())->SetPrivate(isolate->GetCurrentContext(),
                                   v8::Private::New(isolate, v8::String::NewFromUtf8(isolate, "exc_value")),
                                   v8::External::New(isolate, ObjectTracer::Trace(error, new py::object(value)).Object()));
 #else
-    error->ToObject()->SetPrivate(isolate->GetCurrentContext(),
+    error->ToObject(context).FromMaybe(v8::Local<v8::Object>())->SetPrivate(isolate->GetCurrentContext(),
                                   v8::Private::New(isolate, v8::String::NewFromUtf8(isolate, "exc_type")),
                                   v8::External::New(isolate, new py::object(type)));
-    error->ToObject()->SetPrivate(isolate->GetCurrentContext(),
+    error->ToObject(context).FromMaybe(v8::Local<v8::Object>())->SetPrivate(isolate->GetCurrentContext(),
                                   v8::Private::New(isolate, v8::String::NewFromUtf8(isolate, "exc_value")),
                                   v8::External::New(isolate, new py::object(value)));
 #endif
@@ -246,8 +248,8 @@ void CPythonObject::ThrowIf(v8::Isolate *isolate)
   isolate->ThrowException(error);
 }
 
-#define _TERMINATE_CALLBACK_EXECUTION_CHECK(returnValue)               \
-  if (v8::V8::IsExecutionTerminating())                                \
+#define _TERMINATE_CALLBACK_EXECUTION_CHECK(isolate, returnValue)               \
+  if (isolate->IsExecutionTerminating())                                \
   {                                                                    \
     ::PyErr_Clear();                                                   \
     ::PyErr_SetString(PyExc_RuntimeError, "execution is terminating"); \
@@ -255,8 +257,8 @@ void CPythonObject::ThrowIf(v8::Isolate *isolate)
     return;                                                            \
   }
 
-#define TRY_HANDLE_EXCEPTION(value)          \
-  _TERMINATE_CALLBACK_EXECUTION_CHECK(value) \
+#define TRY_HANDLE_EXCEPTION(isolate, value)          \
+  _TERMINATE_CALLBACK_EXECUTION_CHECK(isolate, value) \
   BEGIN_HANDLE_PYTHON_EXCEPTION              \
   {
 #define END_HANDLE_EXCEPTION(value) \
@@ -271,17 +273,17 @@ void CPythonObject::ThrowIf(v8::Isolate *isolate)
     return;                           \
   } while (0);
 
-void CPythonObject::NamedGetter(v8::Local<v8::String> prop, const v8::PropertyCallbackInfo<v8::Value> &info)
+void CPythonObject::NamedGetter(v8::Local<v8::Name> prop, const v8::PropertyCallbackInfo<v8::Value> &info)
 {
   v8::HandleScope handle_scope(info.GetIsolate());
 
-  TRY_HANDLE_EXCEPTION(v8::Undefined(info.GetIsolate()))
+  TRY_HANDLE_EXCEPTION(info.GetIsolate(), v8::Undefined(info.GetIsolate()))
 
   CPythonGIL python_gil;
 
   py::object obj = CJavascriptObject::Wrap(info.Holder());
 
-  v8::String::Utf8Value name(prop);
+  v8::String::Utf8Value name(info.GetIsolate(), prop);
 
   if (PyGen_Check(obj.ptr()))
     CALLBACK_RETURN(v8::Undefined(info.GetIsolate()));
@@ -333,17 +335,17 @@ void CPythonObject::NamedGetter(v8::Local<v8::String> prop, const v8::PropertyCa
   END_HANDLE_EXCEPTION(v8::Undefined(info.GetIsolate()))
 }
 
-void CPythonObject::NamedSetter(v8::Local<v8::String> prop, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<v8::Value> &info)
+void CPythonObject::NamedSetter(v8::Local<v8::Name> prop, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<v8::Value> &info)
 {
   v8::HandleScope handle_scope(info.GetIsolate());
 
-  TRY_HANDLE_EXCEPTION(v8::Undefined(info.GetIsolate()))
+  TRY_HANDLE_EXCEPTION(info.GetIsolate(), v8::Undefined(info.GetIsolate()))
 
   CPythonGIL python_gil;
 
   py::object obj = CJavascriptObject::Wrap(info.Holder());
 
-  v8::String::Utf8Value name(prop);
+  v8::String::Utf8Value name(info.GetIsolate(), prop);
   py::object newval = CJavascriptObject::Wrap(value);
 
   bool found = 1 == ::PyObject_HasAttrString(obj.ptr(), *name);
@@ -393,17 +395,17 @@ void CPythonObject::NamedSetter(v8::Local<v8::String> prop, v8::Local<v8::Value>
   END_HANDLE_EXCEPTION(v8::Undefined(info.GetIsolate()));
 }
 
-void CPythonObject::NamedQuery(v8::Local<v8::String> prop, const v8::PropertyCallbackInfo<v8::Integer> &info)
+void CPythonObject::NamedQuery(v8::Local<v8::Name> prop, const v8::PropertyCallbackInfo<v8::Integer> &info)
 {
   v8::HandleScope handle_scope(info.GetIsolate());
 
-  TRY_HANDLE_EXCEPTION(v8::Handle<v8::Integer>())
+  TRY_HANDLE_EXCEPTION(info.GetIsolate(), v8::Handle<v8::Integer>())
 
   CPythonGIL python_gil;
 
   py::object obj = CJavascriptObject::Wrap(info.Holder());
 
-  v8::String::Utf8Value name(prop);
+  v8::String::Utf8Value name(info.GetIsolate(), prop);
 
   bool exists = PyGen_Check(obj.ptr()) || ::PyObject_HasAttrString(obj.ptr(), *name) ||
                 (::PyMapping_Check(obj.ptr()) && ::PyMapping_HasKeyString(obj.ptr(), *name));
@@ -414,17 +416,17 @@ void CPythonObject::NamedQuery(v8::Local<v8::String> prop, const v8::PropertyCal
   END_HANDLE_EXCEPTION(v8::Handle<v8::Integer>())
 }
 
-void CPythonObject::NamedDeleter(v8::Local<v8::String> prop, const v8::PropertyCallbackInfo<v8::Boolean> &info)
+void CPythonObject::NamedDeleter(v8::Local<v8::Name> prop, const v8::PropertyCallbackInfo<v8::Boolean> &info)
 {
   v8::HandleScope handle_scope(info.GetIsolate());
 
-  TRY_HANDLE_EXCEPTION(v8::Handle<v8::Boolean>())
+  TRY_HANDLE_EXCEPTION(info.GetIsolate(), v8::Handle<v8::Boolean>())
 
   CPythonGIL python_gil;
 
   py::object obj = CJavascriptObject::Wrap(info.Holder());
 
-  v8::String::Utf8Value name(prop);
+  v8::String::Utf8Value name(info.GetIsolate(), prop);
 
   if (!::PyObject_HasAttrString(obj.ptr(), *name) &&
       ::PyMapping_Check(obj.ptr()) &&
@@ -467,7 +469,7 @@ void CPythonObject::NamedEnumerator(const v8::PropertyCallbackInfo<v8::Array> &i
 {
   v8::HandleScope handle_scope(info.GetIsolate());
 
-  TRY_HANDLE_EXCEPTION(v8::Handle<v8::Array>())
+  TRY_HANDLE_EXCEPTION(info.GetIsolate(), v8::Handle<v8::Array>())
 
   CPythonGIL python_gil;
 
@@ -535,7 +537,7 @@ void CPythonObject::IndexedGetter(uint32_t index, const v8::PropertyCallbackInfo
 {
   v8::HandleScope handle_scope(info.GetIsolate());
 
-  TRY_HANDLE_EXCEPTION(v8::Undefined(info.GetIsolate()));
+  TRY_HANDLE_EXCEPTION(info.GetIsolate(), v8::Undefined(info.GetIsolate()));
 
   CPythonGIL python_gil;
 
@@ -580,7 +582,7 @@ void CPythonObject::IndexedSetter(uint32_t index, v8::Local<v8::Value> value, co
 {
   v8::HandleScope handle_scope(info.GetIsolate());
 
-  TRY_HANDLE_EXCEPTION(v8::Undefined(info.GetIsolate()));
+  TRY_HANDLE_EXCEPTION(info.GetIsolate(), v8::Undefined(info.GetIsolate()));
 
   CPythonGIL python_gil;
 
@@ -609,7 +611,7 @@ void CPythonObject::IndexedQuery(uint32_t index, const v8::PropertyCallbackInfo<
 {
   v8::HandleScope handle_scope(info.GetIsolate());
 
-  TRY_HANDLE_EXCEPTION(v8::Handle<v8::Integer>());
+  TRY_HANDLE_EXCEPTION(info.GetIsolate(), v8::Handle<v8::Integer>());
 
   CPythonGIL python_gil;
 
@@ -644,7 +646,7 @@ void CPythonObject::IndexedDeleter(uint32_t index, const v8::PropertyCallbackInf
 {
   v8::HandleScope handle_scope(info.GetIsolate());
 
-  TRY_HANDLE_EXCEPTION(v8::Handle<v8::Boolean>());
+  TRY_HANDLE_EXCEPTION(info.GetIsolate(), v8::Handle<v8::Boolean>());
 
   CPythonGIL python_gil;
 
@@ -668,9 +670,13 @@ void CPythonObject::IndexedDeleter(uint32_t index, const v8::PropertyCallbackInf
 
 void CPythonObject::IndexedEnumerator(const v8::PropertyCallbackInfo<v8::Array> &info)
 {
-  v8::HandleScope handle_scope(info.GetIsolate());
+  v8::Isolate *isolate = info.GetIsolate();
 
-  TRY_HANDLE_EXCEPTION(v8::Handle<v8::Array>());
+  auto context = isolate->GetCurrentContext();
+
+  v8::HandleScope handle_scope(isolate);
+
+  TRY_HANDLE_EXCEPTION(info.GetIsolate(), v8::Handle<v8::Array>());
 
   CPythonGIL python_gil;
 
@@ -682,7 +688,7 @@ void CPythonObject::IndexedEnumerator(const v8::PropertyCallbackInfo<v8::Array> 
 
   for (Py_ssize_t i = 0; i < len; i++)
   {
-    result->Set(v8::Uint32::New(info.GetIsolate(), i), v8::Int32::New(info.GetIsolate(), i)->ToString());
+    result->Set(v8::Uint32::New(info.GetIsolate(), i), v8::Int32::New(info.GetIsolate(), i)->ToString(context).FromMaybe(v8::Handle<v8::String>()));
   }
 
   CALLBACK_RETURN(result);
@@ -716,7 +722,7 @@ void CPythonObject::Caller(const v8::FunctionCallbackInfo<v8::Value> &info)
 {
   v8::HandleScope handle_scope(info.GetIsolate());
 
-  TRY_HANDLE_EXCEPTION(v8::Undefined(info.GetIsolate()));
+  TRY_HANDLE_EXCEPTION(info.GetIsolate(), v8::Undefined(info.GetIsolate()));
 
   CPythonGIL python_gil;
 
@@ -754,7 +760,9 @@ void CPythonObject::SetupObjectTemplate(v8::Isolate *isolate, v8::Handle<v8::Obj
   v8::HandleScope handle_scope(isolate);
 
   clazz->SetInternalFieldCount(1);
-  clazz->SetNamedPropertyHandler(NamedGetter, NamedSetter, NamedQuery, NamedDeleter, NamedEnumerator);
+  // clazz->SetNamedPropertyHandler(NamedGetter, NamedSetter, NamedQuery, NamedDeleter, NamedEnumerator);
+  v8::NamedPropertyHandlerConfiguration config(NamedGetter, NamedSetter, NamedQuery, NamedDeleter, NamedEnumerator);
+  clazz->SetHandler(config);
   clazz->SetIndexedPropertyHandler(IndexedGetter, IndexedSetter, IndexedQuery, IndexedDeleter, IndexedEnumerator);
   clazz->SetCallAsFunctionHandler(Caller);
 }
@@ -763,7 +771,7 @@ v8::Handle<v8::ObjectTemplate> CPythonObject::CreateObjectTemplate(v8::Isolate *
 {
   v8::EscapableHandleScope handle_scope(isolate);
 
-  v8::Local<v8::ObjectTemplate> clazz = v8::ObjectTemplate::New();
+  v8::Local<v8::ObjectTemplate> clazz = v8::ObjectTemplate::New(isolate, v8::Local<v8::FunctionTemplate>());
 
   SetupObjectTemplate(isolate, clazz);
 
@@ -786,11 +794,15 @@ py::object CPythonObject::Unwrap(v8::Handle<v8::Object> obj)
 
 void CPythonObject::Dispose(v8::Handle<v8::Value> value)
 {
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
+  auto context = isolate->GetCurrentContext();
+
+  v8::HandleScope handle_scope(isolate);
 
   if (value->IsObject())
   {
-    v8::Handle<v8::Object> obj = value->ToObject();
+    v8::Handle<v8::Object> obj = value->ToObject(context).FromMaybe(v8::Handle<v8::Object>());
 
     if (IsWrapped(obj))
     {
@@ -822,13 +834,15 @@ v8::Handle<v8::Value> CPythonObject::WrapInternal(py::object obj)
 {
   assert(v8::Isolate::GetCurrent()->InContext());
 
-  v8::EscapableHandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-  v8::TryCatch try_catch;
+  v8::EscapableHandleScope handle_scope(isolate);
+
+  v8::TryCatch try_catch(isolate);
 
   CPythonGIL python_gil;
 
-  TERMINATE_EXECUTION_CHECK(v8::Undefined(v8::Isolate::GetCurrent()))
+  TERMINATE_EXECUTION_CHECK(isolate, v8::Undefined(isolate))
 
   if (obj.is_none())
     return v8::Null(v8::Isolate::GetCurrent());
@@ -974,14 +988,18 @@ void CJavascriptObject::CheckAttr(v8::Handle<v8::String> name) const
 {
   assert(v8::Isolate::GetCurrent()->InContext());
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
+  auto context = isolate->GetCurrentContext();
+
+  v8::HandleScope handle_scope(isolate);
 
   if (!Object()->Has(name))
   {
     std::ostringstream msg;
 
-    msg << "'" << *v8::String::Utf8Value(Object()->ObjectProtoToString())
-        << "' object has no attribute '" << *v8::String::Utf8Value(name) << "'";
+    msg << "'" << *v8::String::Utf8Value(isolate, Object()->ObjectProtoToString(context).FromMaybe(v8::Local<v8::Value>()))
+        << "' object has no attribute '" << *v8::String::Utf8Value(isolate, name) << "'";
 
     throw CJavascriptException(msg.str(), ::PyExc_AttributeError);
   }
@@ -998,9 +1016,11 @@ py::object CJavascriptObject::GetAttr(const std::string &name)
 
   CHECK_V8_CONTEXT();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-  v8::TryCatch try_catch;
+  v8::HandleScope handle_scope(isolate);
+
+  v8::TryCatch try_catch(isolate);
 
   v8::Handle<v8::String> attr_name = DecodeUtf8(name);
 
@@ -1025,9 +1045,11 @@ void CJavascriptObject::SetAttr(const std::string &name, py::object value)
 
   CHECK_V8_CONTEXT();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-  v8::TryCatch try_catch;
+  v8::HandleScope handle_scope(isolate);
+
+  v8::TryCatch try_catch(isolate);
 
   v8::Handle<v8::String> attr_name = DecodeUtf8(name);
   v8::Handle<v8::Value> attr_obj = CPythonObject::Wrap(value);
@@ -1051,9 +1073,11 @@ void CJavascriptObject::DelAttr(const std::string &name)
 
   CHECK_V8_CONTEXT();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-  v8::TryCatch try_catch;
+  v8::HandleScope handle_scope(isolate);
+
+  v8::TryCatch try_catch(isolate);
 
   v8::Handle<v8::String> attr_name = DecodeUtf8(name);
 
@@ -1066,14 +1090,18 @@ py::list CJavascriptObject::GetAttrList(void)
 {
   CHECK_V8_CONTEXT();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
+  auto context = isolate->GetCurrentContext();
+
+  v8::HandleScope handle_scope(isolate);
   CPythonGIL python_gil;
 
   py::list attrs;
 
-  TERMINATE_EXECUTION_CHECK(attrs);
+  TERMINATE_EXECUTION_CHECK(isolate, attrs);
 
-  v8::TryCatch try_catch;
+  v8::TryCatch try_catch(isolate);
 
   v8::Handle<v8::Array> props = Object()->GetPropertyNames();
 
@@ -1110,14 +1138,16 @@ bool CJavascriptObject::Contains(const std::string &name)
 {
   CHECK_V8_CONTEXT();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-  v8::TryCatch try_catch;
+  v8::HandleScope handle_scope(isolate);
+
+  v8::TryCatch try_catch(isolate);
 
   bool found = Object()->Has(DecodeUtf8(name));
 
   if (try_catch.HasCaught())
-    CJavascriptException::ThrowIf(v8::Isolate::GetCurrent(), try_catch);
+    CJavascriptException::ThrowIf(isolate, try_catch);
 
   return found;
 }
@@ -1126,40 +1156,48 @@ bool CJavascriptObject::Equals(CJavascriptObjectPtr other) const
 {
   CHECK_V8_CONTEXT();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-  return other.get() && Object()->Equals(other->Object());
+  auto context = isolate->GetCurrentContext();
+
+  v8::HandleScope handle_scope(isolate);
+
+  return other.get() && Object()->Equals(context, other->Object()).FromMaybe(true);
 }
 
 void CJavascriptObject::Dump(std::ostream &os) const
 {
   CHECK_V8_CONTEXT();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
+  auto context = isolate->GetCurrentContext();
+
+  v8::HandleScope handle_scope(isolate);
 
   if (m_obj.IsEmpty())
     os << "None";
   else if (Object()->IsInt32())
-    os << Object()->Int32Value();
+    os << Object()->Int32Value(context).FromMaybe(0);
   else if (Object()->IsNumber())
-    os << Object()->NumberValue();
+    os << Object()->NumberValue(context).FromMaybe(0.0);
   else if (Object()->IsBoolean())
-    os << Object()->BooleanValue();
+    os << Object()->BooleanValue(context).FromMaybe(true);
   else if (Object()->IsNull())
     os << "None";
   else if (Object()->IsUndefined())
     os << "N/A";
   else if (Object()->IsString())
-    os << *v8::String::Utf8Value(v8::Handle<v8::String>::Cast(Object()));
+    os << *v8::String::Utf8Value(isolate, v8::Handle<v8::String>::Cast(Object()));
   else
   {
-    v8::Handle<v8::String> s = Object()->ToString();
+    v8::Handle<v8::String> s = Object()->ToString(context).FromMaybe(v8::Handle<v8::String>());
 
     if (s.IsEmpty())
-      s = Object()->ObjectProtoToString();
+      s = Object()->ObjectProtoToString(context).FromMaybe(v8::Handle<v8::String>());
 
     if (!s.IsEmpty())
-      os << *v8::String::Utf8Value(s);
+      os << *v8::String::Utf8Value(isolate, s);
   }
 }
 
@@ -1167,42 +1205,59 @@ CJavascriptObject::operator long() const
 {
   CHECK_V8_CONTEXT();
 
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
+  auto context = isolate->GetCurrentContext();
+
   v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
 
   if (m_obj.IsEmpty())
     throw CJavascriptException("argument must be a string or a number, not 'NoneType'", ::PyExc_TypeError);
 
-  return Object()->Int32Value();
+  return Object()->Int32Value(context).FromMaybe(0);
 }
+
 CJavascriptObject::operator double() const
 {
   CHECK_V8_CONTEXT();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
+  auto context = isolate->GetCurrentContext();
+
+  v8::HandleScope handle_scope(isolate);
 
   if (m_obj.IsEmpty())
     throw CJavascriptException("argument must be a string or a number, not 'NoneType'", ::PyExc_TypeError);
 
-  return Object()->NumberValue();
+  return Object()->NumberValue(context).FromMaybe(0.0);
 }
 
 CJavascriptObject::operator bool() const
 {
   CHECK_V8_CONTEXT();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
+  auto context = isolate->GetCurrentContext();
+
+  v8::HandleScope handle_scope(isolate);
 
   if (m_obj.IsEmpty())
     return false;
 
-  return Object()->BooleanValue();
+  return Object()->BooleanValue(context).FromMaybe(true);
 }
 
 py::object CJavascriptObject::Wrap(v8::Handle<v8::Value> value, v8::Handle<v8::Object> self)
 {
   assert(v8::Isolate::GetCurrent()->InContext());
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
+  auto context = isolate->GetCurrentContext();
+
+  v8::HandleScope handle_scope(isolate);
 
   if (value.IsEmpty() || value->IsNull() || value->IsUndefined())
     return py::object();
@@ -1212,38 +1267,38 @@ py::object CJavascriptObject::Wrap(v8::Handle<v8::Value> value, v8::Handle<v8::O
     return py::object(py::handle<>(py::borrowed(Py_False)));
 
   if (value->IsInt32())
-    return py::object(value->Int32Value());
+    return py::object(value->Int32Value(context).FromMaybe(0));
   if (value->IsString())
   {
-    v8::String::Utf8Value str(v8::Handle<v8::String>::Cast(value));
+    v8::String::Utf8Value str(isolate, v8::Handle<v8::String>::Cast(value));
 
     return py::str(*str, str.length());
   }
   if (value->IsStringObject())
   {
-    v8::String::Utf8Value str(value.As<v8::StringObject>()->ValueOf());
+    v8::String::Utf8Value str(isolate, value.As<v8::StringObject>()->ValueOf());
 
     return py::str(*str, str.length());
   }
   if (value->IsBoolean())
   {
-    return py::object(py::handle<>(py::borrowed(value->BooleanValue() ? Py_True : Py_False)));
+    return py::object(py::handle<>(py::borrowed(value->BooleanValue(isolate) ? Py_True : Py_False)));
   }
   if (value->IsBooleanObject())
   {
-    return py::object(py::handle<>(py::borrowed(value.As<v8::BooleanObject>()->BooleanValue() ? Py_True : Py_False)));
+    return py::object(py::handle<>(py::borrowed(value.As<v8::BooleanObject>()->BooleanValue(isolate) ? Py_True : Py_False)));
   }
   if (value->IsNumber())
   {
-    return py::object(py::handle<>(::PyFloat_FromDouble(value->NumberValue())));
+    return py::object(py::handle<>(::PyFloat_FromDouble(value->NumberValue(context).FromMaybe(0.0))));
   }
   if (value->IsNumberObject())
   {
-    return py::object(py::handle<>(::PyFloat_FromDouble(value.As<v8::NumberObject>()->NumberValue())));
+    return py::object(py::handle<>(::PyFloat_FromDouble(value.As<v8::NumberObject>()->NumberValue(context).FromMaybe(0.0))));
   }
   if (value->IsDate())
   {
-    double n = v8::Handle<v8::Date>::Cast(value)->NumberValue();
+    double n = v8::Handle<v8::Date>::Cast(value)->NumberValue(context).FromMaybe(0.0);
 
     time_t ts = (time_t)floor(n / 1000);
 
@@ -1254,7 +1309,7 @@ py::object CJavascriptObject::Wrap(v8::Handle<v8::Value> value, v8::Handle<v8::O
         ((long long)floor(n)) % 1000 * 1000)));
   }
 
-  return Wrap(value->ToObject(), self);
+  return Wrap(value->ToObject(isolate), self);
 }
 
 py::object CJavascriptObject::Wrap(v8::Handle<v8::Object> obj, v8::Handle<v8::Object> self)
@@ -1287,7 +1342,7 @@ py::object CJavascriptObject::Wrap(CJavascriptObject *obj)
 {
   CPythonGIL python_gil;
 
-  TERMINATE_EXECUTION_CHECK(py::object())
+  TERMINATE_EXECUTION_CHECK(v8::Isolate::GetCurrent(), py::object())
 
   return py::object(py::handle<>(boost::python::converter::shared_ptr_to_python<CJavascriptObject>(CJavascriptObjectPtr(obj))));
 }
@@ -1375,11 +1430,15 @@ py::object CJavascriptArray::GetItem(py::object key)
 
   CHECK_V8_CONTEXT();
 
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
+  auto context = isolate->GetCurrentContext();
+
   LazyConstructor();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::HandleScope handle_scope(isolate);
 
-  v8::TryCatch try_catch;
+  v8::TryCatch try_catch(isolate);
 
   if (PySlice_Check(key.ptr()))
   {
@@ -1407,7 +1466,7 @@ py::object CJavascriptArray::GetItem(py::object key)
   {
     uint32_t idx = PyInt_Check(key.ptr()) ? (uint32_t)::PyInt_AsUnsignedLongMask(key.ptr()) : (uint32_t)::PyLong_AsUnsignedLong(key.ptr());
 
-    if (!Object()->Has(idx))
+    if (!Object()->Has(context, idx).FromMaybe(true))
       return py::object();
 
     v8::Handle<v8::Value> value = Object()->Get(v8::Integer::New(v8::Isolate::GetCurrent(), idx));
@@ -1432,11 +1491,15 @@ py::object CJavascriptArray::SetItem(py::object key, py::object value)
 
   CHECK_V8_CONTEXT();
 
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
+  auto context = isolate->GetCurrentContext();
+
   LazyConstructor();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::HandleScope handle_scope(isolate);
 
-  v8::TryCatch try_catch;
+  v8::TryCatch try_catch(isolate);
 
   if (PySlice_Check(key.ptr()))
   {
@@ -1469,7 +1532,7 @@ py::object CJavascriptArray::SetItem(py::object key, py::object value)
             }
             for (Py_ssize_t idx = arrayLen - 1; idx > arrayLen - diff - 1; idx--)
             {
-              Object()->Delete((uint32_t)idx);
+              Object()->Delete(context, (uint32_t)idx);
             }
           }
           else if (itemSize > sliceLen)
@@ -1511,11 +1574,15 @@ py::object CJavascriptArray::DelItem(py::object key)
 
   CHECK_V8_CONTEXT();
 
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
   LazyConstructor();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::HandleScope handle_scope(isolate);
 
-  v8::TryCatch try_catch;
+  auto context = isolate->GetCurrentContext();
+
+  v8::TryCatch try_catch(isolate);
 
   if (PySlice_Check(key.ptr()))
   {
@@ -1531,7 +1598,7 @@ py::object CJavascriptArray::DelItem(py::object key)
 
       for (Py_ssize_t idx = arrayLen - 1; idx > arrayLen - sliceLen - 1; idx--)
       {
-        Object()->Delete((uint32_t)idx);
+        Object()->Delete(context, (uint32_t)idx);
       }
 
       v8i::Handle<v8i::JSReceiver> object = v8::Utils::OpenHandle(*Object());
@@ -1548,10 +1615,10 @@ py::object CJavascriptArray::DelItem(py::object key)
 
     py::object value;
 
-    if (Object()->Has(idx))
+    if (Object()->Has(context, idx).FromMaybe(true))
       value = CJavascriptObject::Wrap(Object()->Get(v8::Integer::New(v8::Isolate::GetCurrent(), idx)), Object());
 
-    if (!Object()->Delete(idx))
+    if (!Object()->Delete(context, idx).FromMaybe(true))
       CJavascriptException::ThrowIf(v8::Isolate::GetCurrent(), try_catch);
 
     return value;
@@ -1564,15 +1631,19 @@ bool CJavascriptArray::Contains(py::object item)
 {
   CHECK_V8_CONTEXT();
 
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+
+  auto context = isolate->GetCurrentContext();
+
   LazyConstructor();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::HandleScope handle_scope(isolate);
 
-  v8::TryCatch try_catch;
+  v8::TryCatch try_catch(isolate);
 
   for (size_t i = 0; i < Length(); i++)
   {
-    if (Object()->Has(i))
+    if (Object()->Has(context, i).FromMaybe(true))
     {
       v8::Handle<v8::Value> value = Object()->Get(v8::Integer::New(v8::Isolate::GetCurrent(), i));
 
@@ -1596,6 +1667,8 @@ py::object CJavascriptFunction::CallWithArgs(py::tuple args, py::dict kwds)
 {
   CHECK_V8_CONTEXT();
 
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+
   size_t argc = ::PyTuple_Size(args.ptr());
 
   if (argc == 0)
@@ -1607,9 +1680,9 @@ py::object CJavascriptFunction::CallWithArgs(py::tuple args, py::dict kwds)
   if (!extractor.check())
     throw CJavascriptException("missed self argument", ::PyExc_TypeError);
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::HandleScope handle_scope(isolate);
 
-  v8::TryCatch try_catch;
+  v8::TryCatch try_catch(isolate);
 
   CJavascriptFunction &func = extractor();
   py::list argv(args.slice(1, py::_));
@@ -1621,9 +1694,11 @@ py::object CJavascriptFunction::Call(v8::Handle<v8::Object> self, py::list args,
 {
   CHECK_V8_CONTEXT();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
 
-  v8::TryCatch try_catch;
+  v8::HandleScope handle_scope(isolate);
+
+  v8::TryCatch try_catch(isolate);
 
   v8::Handle<v8::Function> func = v8::Handle<v8::Function>::Cast(Object());
 
@@ -1662,12 +1737,16 @@ py::object CJavascriptFunction::CreateWithArgs(CJavascriptFunctionPtr proto, py:
 {
   CHECK_V8_CONTEXT();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+
+  v8::HandleScope handle_scope(isolate);
+
+  auto context = isolate->GetCurrentContext();
 
   if (proto->Object().IsEmpty())
     throw CJavascriptException("Object prototype may only be an Object", ::PyExc_TypeError);
 
-  v8::TryCatch try_catch;
+  v8::TryCatch try_catch(isolate);
 
   v8::Handle<v8::Function> func = v8::Handle<v8::Function>::Cast(proto->Object());
 
@@ -1684,7 +1763,7 @@ py::object CJavascriptFunction::CreateWithArgs(CJavascriptFunctionPtr proto, py:
 
   Py_BEGIN_ALLOW_THREADS
 
-      result = func->NewInstance(params.size(), params.empty() ? NULL : &params[0]);
+      result = func->NewInstance(context, params.size(), params.empty() ? NULL : &params[0]).FromMaybe(v8::Handle<v8::Object>());
 
   Py_END_ALLOW_THREADS
 
@@ -1719,9 +1798,11 @@ py::object CJavascriptFunction::ApplyPython(py::object self, py::list args, py::
 {
   CHECK_V8_CONTEXT();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-  return Call(CPythonObject::Wrap(self)->ToObject(), args, kwds);
+  v8::HandleScope handle_scope(isolate);
+
+  return Call(CPythonObject::Wrap(self)->ToObject(isolate), args, kwds);
 }
 
 py::object CJavascriptFunction::Invoke(py::list args, py::dict kwds)
@@ -1737,11 +1818,13 @@ const std::string CJavascriptFunction::GetName(void) const
 {
   CHECK_V8_CONTEXT();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+
+  v8::HandleScope handle_scope(isolate);
 
   v8::Handle<v8::Function> func = v8::Handle<v8::Function>::Cast(Object());
 
-  v8::String::Utf8Value name(v8::Handle<v8::String>::Cast(func->GetName()));
+  v8::String::Utf8Value name(isolate, v8::Handle<v8::String>::Cast(func->GetName()));
 
   return std::string(*name, name.length());
 }
@@ -1781,11 +1864,13 @@ const std::string CJavascriptFunction::GetResourceName(void) const
 {
   CHECK_V8_CONTEXT();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+
+  v8::HandleScope handle_scope(isolate);
 
   v8::Handle<v8::Function> func = v8::Handle<v8::Function>::Cast(Object());
 
-  v8::String::Utf8Value name(v8::Handle<v8::String>::Cast(func->GetScriptOrigin().ResourceName()));
+  v8::String::Utf8Value name(isolate, v8::Handle<v8::String>::Cast(func->GetScriptOrigin().ResourceName()));
 
   return std::string(*name, name.length());
 }
@@ -1793,11 +1878,13 @@ const std::string CJavascriptFunction::GetInferredName(void) const
 {
   CHECK_V8_CONTEXT();
 
-  v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+
+  v8::HandleScope handle_scope(isolate);
 
   v8::Handle<v8::Function> func = v8::Handle<v8::Function>::Cast(Object());
 
-  v8::String::Utf8Value name(v8::Handle<v8::String>::Cast(func->GetInferredName()));
+  v8::String::Utf8Value name(isolate, v8::Handle<v8::String>::Cast(func->GetInferredName()));
 
   return std::string(*name, name.length());
 }
