@@ -25,8 +25,7 @@ private: // Embeded Data
   {
     assert(!context.IsEmpty());
     assert(index > DebugIdIndex);
-    auto data = context->GetEmbedderData(index);
-    if (data.IsEmpty() && creator)
+    if (context->GetNumberOfEmbedderDataFields() < index && creator)
     {
       auto value = creator();
 
@@ -34,7 +33,7 @@ private: // Embeded Data
 
       return value;
     }
-    return static_cast<T *>(v8::Handle<v8::External>::Cast(data)->Value());
+    return static_cast<T *>(v8::Handle<v8::External>::Cast(context->GetEmbedderData(index))->Value());
   }
 
   template <typename T>

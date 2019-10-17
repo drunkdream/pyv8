@@ -28,7 +28,7 @@ BOOST_STATIC_LINK = False
 PYTHON_HOME = None
 V8_HOME = None
 V8_GIT_URL = "https://chromium.googlesource.com/v8/v8.git"
-V8_GIT_TAG = "7.2.110" # "5.8.110"  # https://chromium.googlesource.com/v8/v8.git/+/5.8.110
+V8_GIT_TAG = "7.2.110" # https://chromium.googlesource.com/v8/v8.git/+/7.2.110
 DEPOT_HOME = None
 DEPOT_GIT_URL = "https://chromium.googlesource.com/chromium/tools/depot_tools.git"
 DEPOT_DOWNLOAD_URL = "https://storage.googleapis.com/chrome-infra/depot_tools.zip"
@@ -95,6 +95,9 @@ macros = [
     ("BOOST_THREAD_PLATFORM_PTHREAD", None),
 ]
 
+if is_py3k:
+    macros += [('PYV8_PYTHON_3', None)]
+
 if V8_DEBUGGER:
     macros += [('SUPPORT_DEBUGGER', None)]
 
@@ -109,7 +112,7 @@ boost_libs = [
     'boost_filesystem',
     'boost_log',
     'boost_log_setup',
-    'boost_python',
+    'boost_python%d' % sys.version_info[0],
     'boost_regex',
     'boost_system',
     'boost_thread',
