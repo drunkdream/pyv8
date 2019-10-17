@@ -328,7 +328,7 @@ if __name__ == '__main__':
         source_files += ["AST.cpp", "PrettyPrinter.cpp"]
 
     pyv8 = Extension(name="_PyV8",
-                     sources=map(partial(os.path.join, "src"), source_files),
+                     sources=list(map(partial(os.path.join, "src"), source_files)),
                      define_macros=macros,
                      include_dirs=include_dirs,
                      library_dirs=library_dirs,
