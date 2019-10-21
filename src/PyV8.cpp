@@ -27,10 +27,10 @@ namespace fs = boost::filesystem;
 
 static void load_external_data(logger_t &logger)
 {
-#ifdef PYV8_PYTHON_3
-  const char *filename = ::PyBytes_AsString(::PyUnicode_AsUTF8String(::PyThreadState_Get()->frame->f_code->co_filename));
-#else
+#if PY_MAJOR_VERSION < 3
   const char *filename = ::PyString_AsString(::PyThreadState_Get()->frame->f_code->co_filename);
+#else
+  const char *filename = ::PyBytes_AsString(::PyUnicode_AsUTF8String(::PyThreadState_Get()->frame->f_code->co_filename));
 #endif
 
   fs::path load_path = fs::absolute(fs::path(filename).parent_path() / "v8");
