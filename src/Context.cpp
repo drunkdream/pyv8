@@ -15,8 +15,8 @@ void CContext::Expose(void)
 
       .add_property("locals", &CContext::GetGlobal, "Local variables within context")
 
-      .add_static_property("entered", &CContext::GetEntered,
-                           "The last entered context.")
+      //.add_static_property("entered", &CContext::GetEntered,
+      //                     "The last entered context.")
       .add_static_property("current", &CContext::GetCurrent,
                            "The context that is on the top of the stack.")
       .add_static_property("calling", &CContext::GetCalling,
@@ -201,8 +201,10 @@ void CContext::Leave(void)
   BOOST_LOG_SEV(logger(), trace) << "context exited";
 }
 
-py::object CContext::GetEntered(v8::Isolate *isolate)
+py::object CContext::GetEntered()
 {
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
   v8::HandleScope handle_scope(isolate);
 
   v8::Handle<v8::Context> entered = isolate->GetEnteredContext();
@@ -210,8 +212,10 @@ py::object CContext::GetEntered(v8::Isolate *isolate)
   return (!isolate->InContext() || entered.IsEmpty()) ? py::object() : py::object(py::handle<>(boost::python::converter::shared_ptr_to_python<CContext>(CContextPtr(new CContext(entered)))));
 }
 
-py::object CContext::GetCurrent(v8::Isolate *isolate)
+py::object CContext::GetCurrent()
 {
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
   v8::HandleScope handle_scope(isolate);
 
   v8::Handle<v8::Context> current = isolate->GetCurrentContext();
@@ -219,8 +223,10 @@ py::object CContext::GetCurrent(v8::Isolate *isolate)
   return (current.IsEmpty()) ? py::object() : py::object(py::handle<>(py::converter::shared_ptr_to_python<CContext>(CContextPtr(new CContext(current)))));
 }
 
-py::object CContext::GetCalling(v8::Isolate *isolate)
+py::object CContext::GetCalling()
 {
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
   v8::HandleScope handle_scope(isolate);
 
   v8::Handle<v8::Context> calling = isolate->GetCurrentContext();

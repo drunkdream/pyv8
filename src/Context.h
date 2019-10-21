@@ -80,11 +80,11 @@ public:
   py::object Evaluate(const std::string &src, const std::string name = std::string(), int line = -1, int col = -1);
   py::object EvaluateW(const std::wstring &src, const std::string name = std::string(), int line = -1, int col = -1);
 
-  static py::object GetEntered(v8::Isolate *isolate = v8::Isolate::GetCurrent());
-  static py::object GetCurrent(v8::Isolate *isolate = v8::Isolate::GetCurrent());
-  static py::object GetCalling(v8::Isolate *isolate = v8::Isolate::GetCurrent());
+  static py::object GetEntered();
+  static py::object GetCurrent();
+  static py::object GetCalling();
 
-  static bool InContext(v8::Isolate *isolate = v8::Isolate::GetCurrent()) { return isolate->InContext(); }
+  static bool InContext() {v8::Isolate *isolate = v8::Isolate::GetCurrent(); return isolate->InContext(); }
 
   static logger_t &Logger(v8::Isolate *isolate = v8::Isolate::GetCurrent())
   {
