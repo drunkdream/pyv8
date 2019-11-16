@@ -141,9 +141,9 @@ void CPythonObject::ThrowIf(v8::Isolate *isolate)
 
   assert(PyErr_OCCURRED());
 
-  auto context = isolate->GetCurrentContext();
-
   v8::HandleScope handle_scope(isolate);
+
+  auto context = isolate->GetCurrentContext();
 
   PyObject *exc, *val, *trb;
 
@@ -672,9 +672,9 @@ void CPythonObject::IndexedEnumerator(const v8::PropertyCallbackInfo<v8::Array> 
 {
   v8::Isolate *isolate = info.GetIsolate();
 
-  auto context = isolate->GetCurrentContext();
-
   v8::HandleScope handle_scope(isolate);
+
+  auto context = isolate->GetCurrentContext();
 
   TRY_HANDLE_EXCEPTION(info.GetIsolate(), v8::Handle<v8::Array>());
 
@@ -796,9 +796,9 @@ void CPythonObject::Dispose(v8::Handle<v8::Value> value)
 {
   v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-  auto context = isolate->GetCurrentContext();
-
   v8::HandleScope handle_scope(isolate);
+
+  auto context = isolate->GetCurrentContext();
 
   if (value->IsObject())
   {
@@ -990,9 +990,9 @@ void CJavascriptObject::CheckAttr(v8::Handle<v8::String> name) const
 
   v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-  auto context = isolate->GetCurrentContext();
-
   v8::HandleScope handle_scope(isolate);
+
+  auto context = isolate->GetCurrentContext();
 
   if (!Object()->Has(name))
   {
@@ -1092,9 +1092,10 @@ py::list CJavascriptObject::GetAttrList(void)
 
   v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
+  v8::HandleScope handle_scope(isolate);
+
   auto context = isolate->GetCurrentContext();
 
-  v8::HandleScope handle_scope(isolate);
   CPythonGIL python_gil;
 
   py::list attrs;
@@ -1158,9 +1159,9 @@ bool CJavascriptObject::Equals(CJavascriptObjectPtr other) const
 
   v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-  auto context = isolate->GetCurrentContext();
-
   v8::HandleScope handle_scope(isolate);
+
+  auto context = isolate->GetCurrentContext();
 
   return other.get() && Object()->Equals(context, other->Object()).FromMaybe(true);
 }
@@ -1171,9 +1172,9 @@ void CJavascriptObject::Dump(std::ostream &os) const
 
   v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-  auto context = isolate->GetCurrentContext();
-
   v8::HandleScope handle_scope(isolate);
+
+  auto context = isolate->GetCurrentContext();
 
   if (m_obj.IsEmpty())
     os << "None";
@@ -1207,9 +1208,9 @@ CJavascriptObject::operator long() const
 
   v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-  auto context = isolate->GetCurrentContext();
-
   v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
+
+  auto context = isolate->GetCurrentContext();
 
   if (m_obj.IsEmpty())
     throw CJavascriptException("argument must be a string or a number, not 'NoneType'", ::PyExc_TypeError);
@@ -1223,9 +1224,9 @@ CJavascriptObject::operator double() const
 
   v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-  auto context = isolate->GetCurrentContext();
-
   v8::HandleScope handle_scope(isolate);
+
+  auto context = isolate->GetCurrentContext();
 
   if (m_obj.IsEmpty())
     throw CJavascriptException("argument must be a string or a number, not 'NoneType'", ::PyExc_TypeError);
@@ -1239,9 +1240,9 @@ CJavascriptObject::operator bool() const
 
   v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-  auto context = isolate->GetCurrentContext();
-
   v8::HandleScope handle_scope(isolate);
+
+  auto context = isolate->GetCurrentContext();
 
   if (m_obj.IsEmpty())
     return false;
@@ -1255,9 +1256,9 @@ py::object CJavascriptObject::Wrap(v8::Handle<v8::Value> value, v8::Handle<v8::O
 
   v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-  auto context = isolate->GetCurrentContext();
-
   v8::HandleScope handle_scope(isolate);
+
+  auto context = isolate->GetCurrentContext();
 
   if (value.IsEmpty() || value->IsNull() || value->IsUndefined())
     return py::object();
@@ -1430,13 +1431,13 @@ py::object CJavascriptArray::GetItem(py::object key)
 
   CHECK_V8_CONTEXT();
 
-  v8::Isolate *isolate = v8::Isolate::GetCurrent();
-
-  auto context = isolate->GetCurrentContext();
-
   LazyConstructor();
 
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
+
   v8::HandleScope handle_scope(isolate);
+
+  auto context = isolate->GetCurrentContext();
 
   v8::TryCatch try_catch(isolate);
 
@@ -1493,11 +1494,11 @@ py::object CJavascriptArray::SetItem(py::object key, py::object value)
 
   v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
-  auto context = isolate->GetCurrentContext();
-
   LazyConstructor();
 
   v8::HandleScope handle_scope(isolate);
+
+  auto context = isolate->GetCurrentContext();
 
   v8::TryCatch try_catch(isolate);
 
@@ -1633,11 +1634,11 @@ bool CJavascriptArray::Contains(py::object item)
 
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
 
-  auto context = isolate->GetCurrentContext();
-
   LazyConstructor();
 
   v8::HandleScope handle_scope(isolate);
+
+  auto context = isolate->GetCurrentContext();
 
   v8::TryCatch try_catch(isolate);
 
