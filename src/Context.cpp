@@ -114,10 +114,12 @@ CContext::CContext(py::object global, py::list extensions, v8::Isolate *isolate)
   }
 }
 
-void CContext::Dispose(bool disposed, v8::Isolate *isolate)
+void CContext::Dispose(bool disposed)
 {
   if (m_context.IsEmpty())
     return;
+
+  v8::Isolate *isolate = v8::Isolate::GetCurrent();
 
   v8::HandleScope handle_scope(isolate);
 

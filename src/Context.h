@@ -63,7 +63,7 @@ public:
   CContext(py::object global, py::list extensions, v8::Isolate *isolate = v8::Isolate::GetCurrent());
   ~CContext() { Dispose(false); }
 
-  void Dispose(bool disposed = true, v8::Isolate *isolate = v8::Isolate::GetCurrent());
+  void Dispose(bool disposed = true);
 
   inline v8::Handle<v8::Context> Context(v8::Isolate *isolate = v8::Isolate::GetCurrent()) const { return m_context.Get(isolate); }
 
