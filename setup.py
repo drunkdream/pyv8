@@ -3,13 +3,15 @@
 from __future__ import with_statement
 from __future__ import print_function
 
-import os.path
-import subprocess
-import traceback
+import json
 import logging
+import os
+import subprocess
+import tarfile
+import traceback
 import urllib
 import zipfile
-import json
+
 from itertools import chain
 from functools import partial
 from datetime import datetime
@@ -18,6 +20,11 @@ from distutils.command.build import build
 from distutils.command.build_ext import build_ext
 from setuptools import setup, Extension
 from setuptools.command.develop import develop
+
+try:
+    from urllib import urlretrieve
+except ImportError:
+    from urllib.request import urlretrieve
 
 from settings import *
 
@@ -80,6 +87,24 @@ def download_progress(blocks, block_size, total_size):
                  downloaded_percent*100, downloaded_bytes, total_size)
 
 
+def download_boost():
+    if os.path.exists(os.path.join(BOOST_HOME, 'stage', 'lib')):
+        log.info("Found boost in %s" % BOOST_HOME)
+        return
+    
+    tmpfile, _ = urlretrieve(BOOST_DOWNLOAD_URL, reporthook=download_progress)
+
+    tf = tarfile.open(tmpfile, "r:gz")
+    tf.extractall(os.path.dirname(BOOST_HOME))
+    if not os.path.exists(os.path.join(BOOST_HOME, "bootstrap.sh")):
+        raise RuntimeError("Extract boost source failed")
+
+
+def build_boost():
+    exec_cmd("./bootstrap.sh --with-toolset=clang --with-libraries=date_time,filesystem,log,regex,system,thread,python --with-python=/usr/bin/python3 --with-python-root=/usr", cwd=BOOST_HOME)
+    exec_cmd('./b2 toolset=clang cxxflags="-std=c++11 -fPIC -nostdinc++ -I/usr/local/include -isystem%(pyv8_path)s/build/v8/buildtools/third_party/libc++/trunk/include -isystem%(pyv8_path)s/build/v8/buildtools/third_party/libc++abi/trunk/include --sysroot=%(pyv8_path)s/build/v8/build/linux/debian_sid_amd64-sysroot" -d+2 -q' % {'pyv8_path': os.path.dirname(os.path.abspath(__file__))}, cwd=BOOST_HOME)
+
+
 def install_depot():
     """
     Install depot_tools
@@ -97,7 +122,7 @@ def install_depot():
 
         start_time = datetime.now()
 
-        tmpfile, _ = urllib.urlretrieve(DEPOT_DOWNLOAD_URL, reporthook=download_progress)
+        tmpfile, _ = urlretrieve(DEPOT_DOWNLOAD_URL, reporthook=download_progress)
 
         download_time = datetime.now() - start_time
 
@@ -270,6 +295,10 @@ def prepare_v8():
         log.error("fail to checkout and build v8, %s", e)
         log.debug(traceback.format_exc())
 
+def prepare_boost():
+    download_boost()
+    build_boost()
+
 
 class pyv8_build_ext(build_ext):
     def run(self):
@@ -302,6 +331,8 @@ class pyv8_build_ext(build_ext):
 class pyv8_build(build):
     def run(self):
         log.info("run `build` command")
+        
+        prepare_boost()
 
         prepare_v8()
 
@@ -311,6 +342,8 @@ class pyv8_build(build):
 class pyv8_develop(develop):
     def run(self):
         log.info("run `develop` command")
+
+        prepare_boost()
 
         prepare_v8()
 

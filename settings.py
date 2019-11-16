@@ -32,6 +32,8 @@ V8_GIT_TAG = "7.2.110" # https://chromium.googlesource.com/v8/v8.git/+/7.2.110
 DEPOT_HOME = None
 DEPOT_GIT_URL = "https://chromium.googlesource.com/chromium/tools/depot_tools.git"
 DEPOT_DOWNLOAD_URL = "https://storage.googleapis.com/chrome-infra/depot_tools.zip"
+BOOST_VERSION = "1.66.0"
+BOOST_DOWNLOAD_URL = "https://sourceforge.net/projects/boost/files/boost/%s/boost_%s.tar.gz/download" % (BOOST_VERSION, BOOST_VERSION.replace(".", "_"))
 
 INCLUDE = None
 LIB = None
@@ -68,6 +70,9 @@ if DEPOT_HOME is None:
 
 if type(PYV8_DEBUG) == str:
     PYV8_DEBUG = bool(strtobool(PYV8_DEBUG))
+
+if not BOOST_HOME:
+    BOOST_HOME = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'boost_%s' % BOOST_VERSION.replace(".", "_"))
 
 V8_BACKTRACE = True                     # Support for backtrace_symbols on linux.
 V8_DISASSEMBLER = PYV8_DEBUG            # enable the disassembler to inspect generated code
