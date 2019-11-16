@@ -24,7 +24,7 @@ PYV8_HOME = os.path.abspath(os.path.dirname(__file__))
 BOOST_HOME = None
 BOOST_MT = is_osx
 BOOST_DEBUG = False
-BOOST_STATIC_LINK = False
+BOOST_STATIC_LINK = True
 PYTHON_HOME = None
 V8_HOME = None
 V8_GIT_URL = "https://chromium.googlesource.com/v8/v8.git"
@@ -36,7 +36,7 @@ DEPOT_DOWNLOAD_URL = "https://storage.googleapis.com/chrome-infra/depot_tools.zi
 INCLUDE = None
 LIB = None
 OFFLINE_MODE = False
-PYV8_DEBUG = False
+PYV8_DEBUG = True
 
 MAKE = 'gmake' if is_freebsd else 'make'
 
@@ -72,7 +72,7 @@ if type(PYV8_DEBUG) == str:
 V8_BACKTRACE = True                     # Support for backtrace_symbols on linux.
 V8_DISASSEMBLER = PYV8_DEBUG            # enable the disassembler to inspect generated code
 V8_GDB_JIT = PYV8_DEBUG
-V8_HANDLE_ZAPPING = True
+V8_HANDLE_ZAPPING = False
 V8_I18N = True
 V8_INSPECTOR = True
 V8_OBJECT_PRINT = PYV8_DEBUG
@@ -91,12 +91,12 @@ V8_DEBUGGER = False
 
 macros = [
     ("BOOST_PYTHON_STATIC_LIB", None),
-    ("BOOST_LOG_DLL", None),
-    ("BOOST_THREAD_PLATFORM_PTHREAD", None),
+    #("BOOST_LOG_DLL", None),
+    #("BOOST_THREAD_PLATFORM_PTHREAD", None),
 ]
 
-if is_py3k:
-    macros += [('PYV8_PYTHON_3', None)]
+if PYV8_DEBUG:
+    macros += [('DEBUG', None)]
 
 if V8_DEBUGGER:
     macros += [('SUPPORT_DEBUGGER', None)]
@@ -105,7 +105,29 @@ if V8_I18N:
     macros += [('V8_I18N_SUPPORT', None)]
 
 if V8_USE_SNAPSHOT:
-    macros += [('V8_USE_EXTERNAL_STARTUP_DATA', None)]
+    macros += [('V8_USE_SNAPSHOT', None),
+        ('V8_USE_EXTERNAL_STARTUP_DATA', None)]
+
+if V8_HANDLE_ZAPPING:
+    macros += [('ENABLE_HANDLE_ZAPPING', None)]
+
+macros += [
+    ('V8_TYPED_ARRAY_MAX_SIZE_IN_HEAP', 64),
+    ('V8_INTL_SUPPORT', None),
+    ('V8_CONCURRENT_MARKING', None),
+    ('V8_EMBEDDED_BUILTINS', None),
+    ('V8_EMBEDDED_BYTECODE_HANDLERS', None),
+    ('U_USING_ICU_NAMESPACE', 0),
+    ('USE_CHROMIUM_ICU', 1),
+    ('UCHAR_TYPE', 'uint16_t'),
+    ('ICU_UTIL_DATA_IMPL', 'ICU_UTIL_DATA_FILE'),
+    ('U_STATIC_IMPLEMENTATION', None),
+    ('USE_AURA', 1),
+    ('USE_GLIB', 1),
+    ('USE_NSS_CERTS', 1),
+    ('USE_X11', 1),
+    ('FULL_SAFE_BROWSING', None),
+]
 
 boost_libs = [
     'boost_date_time',
@@ -131,7 +153,7 @@ include_dirs = [
 
 library_dirs = []
 libraries = []
-extra_compile_args = ['-std=c++11']
+extra_compile_args = ['-std=c++11', '-nostdinc++', '-isystembuild/v8/buildtools/third_party/libc++/trunk/include', '-isystembuild/v8/buildtools/third_party/libc++abi/trunk/include', '--sysroot=build/v8/build/linux/debian_sid_amd64-sysroot']
 extra_link_args = []
 extra_objects = []
 
@@ -157,7 +179,7 @@ if not is_winnt:
         include_dirs += [BOOST_HOME]
         library_dirs += [boost_lib_dir]
     else:
-        boost_lib_dir = '/usr/local/lib'
+        boost_lib_dir = os.path.join(PYV8_HOME, 'boost')
 
     if BOOST_STATIC_LINK:
         extra_link_args += [os.path.join(boost_lib_dir, "lib%s.a") % lib for lib in boost_libs]
@@ -260,7 +282,7 @@ arch = 'x64' if is_64bit else 'arm' if is_arm else 'ia32'
 mode = 'debug' if PYV8_DEBUG else 'release'
 target = arch + '.' + mode
 
-v8_libs = ['v8_monolith'] # 'v8', 'v8_libbase', 'v8_libplatform'
+v8_libs = ['v8_monolith']
 
 if V8_I18N:
     v8_libs += ['icuuc', 'icui18n']
